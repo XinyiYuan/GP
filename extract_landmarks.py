@@ -52,7 +52,6 @@ def main(args):
 
         print("Extract landmarks from {}.".format(video))
         raw_data = detect_track(input_path, video, visualize, visualize_path)
-
         if len(raw_data) == 0:
             print("No face detected", video)
         else:
@@ -74,3 +73,4 @@ if __name__ == "__main__":
                         )
     args = parser.parse_args()
     main(args)
+    
