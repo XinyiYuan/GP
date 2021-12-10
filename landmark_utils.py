@@ -1,13 +1,15 @@
 from tqdm import tqdm
 import numpy as np
 from imutils import face_utils
-import dlib
+# import dlib
 from collections import OrderedDict
 import cv2
 from calib_utils import track_bidirectional
+import mediapipe as mp
 
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# detector = dlib.get_frontal_face_detector()
+# predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# TODO:
 FACIAL_LANDMARKS_68_IDXS = OrderedDict([
 	("mouth", (48, 68)),
 	("inner_mouth", (60, 68)),
@@ -31,52 +33,83 @@ def shape_to_face(shape, width, height, scale=1.2):
     # face_center: the center coordinate of face (1*2 list [x_c, y_c])
     face_size: the face is rectangular( width = height = size)(int)
     """
-    x_min, y_min = np.min(shape, axis=0)
-    x_max, y_max = np.max(shape, axis=0)
-
+    x_min, y_min, z_min = np.min(shape, axis=0)
+    x_max, y_max, z_max = np.max(shape, axis=0)
+    
+    x_min = np.rint(x_min * width)
+    x_max = np.rint(x_max * width)
+    y_min = np.rint(y_min * height)
+    y_max = np.rint(y_max * height)
+    
     x_center = (x_min + x_max) // 2
     y_center = (y_min + y_max) // 2
-
-    face_size = int(max(x_max - x_min, y_max - y_min) * scale)
-    # Enforce it to be even
-    # Thus the real whole bounding box size will be a odd
-    # But after cropping the face size will become even and
-    # keep same to the face_size parameter.
+    
+    face_size = np.rint(max(x_max - x_min, y_max - y_min) * scale)
     face_size = face_size // 2 * 2
-
+    
     x1 = max(x_center - face_size // 2, 0)
     y1 = max(y_center - face_size // 2, 0)
-
+  
     face_size = min(width - x1, face_size)
     face_size = min(height - y1, face_size)
-
+    
     x2 = x1 + face_size
     y2 = y1 + face_size
-
-    face_new = [int(x1), int(y1), int(x2), int(y2)]
+    
+    face_new = [int(x1), int(y1), z_min, int(x2), int(y2), z_max]
+    
     return face_new, face_size
 
 def predict_single_frame(frame):
     """
     :param frame: A full frame of video
     :return:
-    face: bounding box of face
     shape: landmark locations
     """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray, 0)
-#     faces = detector(frame, 0)
-    if len(faces) < 1:
-        return 0, 0
-    face = faces[0]
-    shape = predictor(frame, face)
-    shape = face_utils.shape_to_np(shape)
+  
+  # use mediapipe
+    mp_face_mesh = mp.solutions.face_mesh
+    
+    with mp_face_mesh.FaceMesh(
+        static_image_mode=False,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5) as face_mesh:
+        # Convert the BGR image to RGB before processing.
+        results = face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        shape = results.multi_face_landmarks
+    shape = str(shape).split()
+    shape.pop(0)
+    shape.pop(-1)
+    
+    j = 0
+    for i in range(0, len(shape)):
+        if shape[j] == 'x:' or shape[j] == 'y:' or shape[j] == 'z:' or shape[j] == '{' or shape[j] == '}' or shape[j] == 'landmark':
+            shape.pop(j)
+        else:
+            shape[j] = float(shape[j])
+            j += 1
+    
+    shape_new = [[0 for i in range(0, 3)]for j in range(0, len(shape)//3)]
+    for j in range(0, len(shape)//3):
+        for i in range(0, 3):
+            shape_new[j][i] = shape[3*j+i]
+        
+    shape = np.array(shape_new)
+    # print('shape:')
+    # print(shape)
+    # print(type(shape))
+    
+    x_min, y_min, z_min = np.min(shape, axis=0)
+    x_max, y_max, z_max = np.max(shape, axis=0)
+    face = [float(x_min), float(y_min), float(z_min), float(x_max), float(y_max), float(z_max)]
     return face, shape
 
 def landmark_align(shape):
     desiredLeftEye = (0.35, 0.25)
     desiredFaceWidth=2
     desiredFaceHeight=2
+    ## TODO
     (lStart, lEnd) = FACIAL_LANDMARKS_68_IDXS["left_eye"]
     (rStart, rEnd) = FACIAL_LANDMARKS_68_IDXS["right_eye"]
 
@@ -119,14 +152,16 @@ def landmark_align(shape):
     M[1, 2] += (tY - eyesCenter[1])
 
     n, d = shape.shape
-    temp = np.zeros((n, d + 1), dtype="int")
-    temp[:, 0:2] = shape
-    temp[:, 2] = 1
-    aligned_landmarks = np.matmul(M, temp.T)
+    temp = np.zeros((n, d), dtype="int")
+    temp[:, 0:3] = shape
+    # temp[:, 2] = 1
+    # print(M.shape) # (2, 3)
+    # print(temp.T.shape) # (3, 468)
+    aligned_landmarks = np.matmul(M, temp.T) # (2,468)
     return aligned_landmarks.T #.astype("int"))
-
+'''
 def check_and_merge(location, forward, feedback, P_predict, status_fw=None, status_fb=None):
-    num_pts = 68
+    num_pts = 468 #68
     check = [True] * num_pts
 
     target = location[1]
@@ -175,7 +210,7 @@ def check_and_merge(location, forward, feedback, P_predict, status_fw=None, stat
             # Update the P_predict by the current K
             P_predict[ipt] = (1 - K) * P_predict[ipt]
     return location_merge, check, P_predict
-
+'''
 
 def detect_frames_track(frames, fps, use_visualization, visualize_path, video):
 
@@ -204,90 +239,37 @@ def detect_frames_track(frames, fps, use_visualization, visualize_path, video):
     print("Detecting:")
     for i in tqdm(range(frames_num)):
         frame = frames[i]
-        face, shape = predict_single_frame(frame)
-        if face == 0:
-            if len(shapes_origin) == 0:
-                skipped += 1
-                # print("Skipped", skipped, "Frame_num", frames_num)
-                continue
-            shape = shapes_origin[i-1-skipped]
+        face, shape = predict_single_frame(frame) # face: [0.0, 1.0] (normalized)
 
-        face, face_size = shape_to_face(shape, frame_width, frame_height, 1.2)
-        faceFrame = frame[face[1]: face[3],
-                            face[0]:face[2]]
+        face_new, face_size = shape_to_face(shape, frame_width, frame_height, 1.2) # face_new: original size
+        
+        faceFrame = frame[face_new[1]: face_new[4], face_new[0]: face_new[3]]
         if face_size < face_size_normalized:
             inter_para = cv2.INTER_CUBIC
         else:
             inter_para = cv2.INTER_AREA
+        
         face_norm = cv2.resize(faceFrame, (face_size_normalized, face_size_normalized), interpolation=inter_para)
         scale_shape = face_size_normalized/face_size
-        shape_norm = np.rint((shape-np.array([face[0], face[1]])) * scale_shape).astype(int)
+        
+        # shape_norm = np.rint((shape-np.array([face_new[0], face_new[1]])) * scale_shape).astype(int)
+        
+        face_array = np.array([face_new[0], face_new[1]])
+        face_array = np.pad(face_array, (0,1), 'constant', constant_values=(0,0))
+        shape_norm = np.rint((shape-face_array)*scale_shape)
+        
         faces.append(face_norm)
-        shapes_para.append([face[0], face[1], scale_shape])
+        shapes_para.append([face_new[0], face_new[1], scale_shape])
         shapes_origin.append(shape)
         locations.append(shape_norm)
-
+    
+      # print('success!')
     """
     Calibration module.
     """
-    segment_length = 2
     locations_sum = len(locations)
-    if locations_sum == 0:
-        return []
-    locations_track = [locations[0]]
-    num_pts = 68
-    P_predict = np.array([0] * num_pts).reshape(num_pts).astype(float)
-    print("Tracking")
-    for i in tqdm(range(locations_sum - 1)):
-        faces_seg = faces[i:i + segment_length]
-        locations_seg = locations[i:i + segment_length]
-
-        #----------------------------------------------------------------------#
-        """
-        Numpy Version
-        """
-
-        # locations_track_start = [locations_track[i]]
-        # forward_pts, feedback_pts = track_bidirectional(faces_seg, locations_track_start)
-        #
-        # forward_pts = np.rint(forward_pts).astype(int)
-        # feedback_pts = np.rint(feedback_pts).astype(int)
-        # merge_pt, check, P_predict = check_and_merge(locations_seg, forward_pts, feedback_pts, P_predict)
-
-        #----------------------------------------------------------------------#
-        """
-        OpenCV Version
-        """
-
-        lk_params = dict(winSize=(15, 15),
-                         maxLevel=3,
-                         criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-        # Use the tracked current location as input. Also use the next frame's predicted location for
-        # auxiliary initialization.
-
-        start_pt = locations_track[i].astype(np.float32)
-        target_pt = locations_seg[1].astype(np.float32)
-
-        forward_pt, status_fw, err_fw = cv2.calcOpticalFlowPyrLK(faces_seg[0], faces_seg[1],
-                                                                 start_pt, target_pt, **lk_params,
-                                                                 flags=cv2.OPTFLOW_USE_INITIAL_FLOW)
-        feedback_pt, status_fb, err_fb = cv2.calcOpticalFlowPyrLK(faces_seg[1], faces_seg[0],
-                                                                  forward_pt, start_pt, **lk_params,
-                                                                  flags=cv2.OPTFLOW_USE_INITIAL_FLOW)
-
-        forward_pts = [locations_track[i].copy(), forward_pt]
-        feedback_pts = [feedback_pt, forward_pt.copy()]
-
-        forward_pts = np.rint(forward_pts).astype(int)
-        feedback_pts = np.rint(feedback_pts).astype(int)
-
-        merge_pt, check, P_predict = check_and_merge(locations_seg, forward_pts, feedback_pts, P_predict, status_fw,
-                                                     status_fb)
-
-        # ----------------------------------------------------------------------#
-
-        locations_track.append(merge_pt)
-
+    locations_track = locations
+    
     """
     If us visualization, write the results to the visualize output folder.
     """
