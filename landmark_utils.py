@@ -61,9 +61,9 @@ def predict_single_frame(frame):
     
     shape = np.array(shape)
     face = [x_min, y_min, z_min, x_max, y_max, z_max]
-    print(shape)
+    # print(shape)
     # print(type(shape)) # numpy.ndarray
-    print(shape.shape) # (468, 3)
+    # print(shape.shape) # (468, 3)
     # print(len(face)) # 6
     return face, shape
 
@@ -92,8 +92,8 @@ def detect_frames_track(frames, fps, use_visualization, visualize_path, video):
     # ----------------------------------------------------------------------------#
 
     print("Detecting:")
-    for i in range(frames_num):
-    # for i in tqdm(range(frames_num)):
+    # for i in range(frames_num):
+    for i in tqdm(range(frames_num)):
         frame = frames[i]
         face, shape = predict_single_frame(frame) # face: [0.0, 1.0] (normalized)
 

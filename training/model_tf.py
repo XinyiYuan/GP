@@ -124,7 +124,8 @@ def main(args):
     # model = g1, model_diff = g2
     """
     model = K.Sequential([
-        layers.InputLayer(input_shape=(BLOCK_SIZE, 136)),
+        # layers.InputLayer(input_shape=(BLOCK_SIZE, 136)), # 68*2
+		layers.InputLayer(input_shape=(BLOCK_SIZE, 1404)), # 468*3
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),
@@ -133,7 +134,8 @@ def main(args):
         layers.Dense(2, activation='softmax')
     ])
     model_diff = K.Sequential([
-        layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 136)),
+        # layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 136)),
+		layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 1404)),
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),

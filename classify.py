@@ -4,6 +4,7 @@ import os
 from tqdm import tqdm
 from tensorflow.keras import layers
 import tensorflow as tf
+# import h5py
 
 block_size = 60
 DROPOUT_RATE = 0.5
@@ -11,11 +12,13 @@ RNN_UNIT = 64
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+'''
 gpus = tf.config.list_physical_devices(device_type='GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(device=gpu, enable=True)
 device = "CPU" if len(gpus) == 0 else "GPU"
 print("Using device: {}".format(device))
+'''
 
 def get_data_for_test(path, fake, block):  # fake:manipulated=1 original=0
     files = os.listdir(path)
@@ -75,7 +78,8 @@ def main():
     test_samples, test_samples_diff, _, _, test_sv, test_vc = get_data_for_test(landmark_path, 1, block_size)
 
     model = K.Sequential([
-        layers.InputLayer(input_shape=(block_size, 136)),
+        # layers.InputLayer(input_shape=(block_size, 136)),
+		layers.InputLayer(input_shape=(block_size, 1404)), # 468*3
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),
@@ -84,7 +88,8 @@ def main():
         layers.Dense(2, activation='softmax')
     ])
     model_diff = K.Sequential([
-        layers.InputLayer(input_shape=(block_size - 1, 136)),
+        # layers.InputLayer(input_shape=(block_size - 1, 136)),
+		layers.InputLayer(input_shape=(block_size - 1, 1404)), # 468*3
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),
@@ -93,8 +98,9 @@ def main():
         layers.Dense(2, activation='softmax')
     ])
 
-    lossFunction = K.losses.SparseCategoricalCrossentropy(from_logits=False)
-    optimizer = K.optimizers.Adam(learning_rate=0.001)
+    # lossFunction = K.losses.SparseCategoricalCrossentropy(from_logits=False)
+    lossFunction = 'sparse_categorical_crossentropy'
+    optimizer = K.optimizers.Adam(lr=0.001)
     model.compile(optimizer=optimizer,
                   loss=lossFunction,
                   metrics=['accuracy'])
@@ -105,8 +111,8 @@ def main():
     print("Loading models and predicting...")
 
     #----Using Deeperforensics 1.0 Parameters----#
-    model.load_weights('./model_weights/deeper/g1.h5')
-    model_diff.load_weights('./model_weights/deeper/g2.h5')
+    model.load_weights(r'./model_weights/deeper/g1.h5')
+    model_diff.load_weights(r'./model_weights/deeper/g2.h5')
 
     #----Using FF++ Parameters----#
     # model.load_weights('./model_weights/ff/g1.h5')
