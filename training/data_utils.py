@@ -18,9 +18,14 @@ def get_data(path, fake, block):
     y = []
 
     for file in tqdm(files):
+        # print("file:"+file)
         vectors = np.loadtxt(join(path, file))
+        # print(type(vectors))
+        # print(vectors.shape)
         for i in range(0, vectors.shape[0] - block, block):
             vec = vectors[i:i + block, :]
+            # print(vec.shape)
+            # print(type(vec))
             x.append(vec)
             vec_next = vectors[i + 1:i + block, :]
             vec_next = np.pad(vec_next, ((0, 1), (0, 0)), 'constant', constant_values=(0, 0))

@@ -5,11 +5,12 @@ import tensorflow.keras as K
 from tensorflow.keras import layers
 from data_utils import *
 from os.path import join
-
+import matplotlib.pyplot as plt
+import pickle
 
 def load_data_train(add_real, add_fake, block_size):
-    train_samples, train_samples_diff, train_labels = get_data(join(add_real, "train/"), 0, block_size)
     tmp_samples, tmp_samples_diff, tmp_labels = get_data(join(add_fake, "train/"), 1, block_size)
+    train_samples, train_samples_diff, train_labels = get_data(join(add_real, "train/"), 0, block_size)
 
     train_samples = np.concatenate((train_samples, tmp_samples), axis=0)
     train_samples_diff = np.concatenate((train_samples_diff, tmp_samples_diff), axis=0)
@@ -77,9 +78,9 @@ def main(args):
     DROPOUT_RATE = 0.5
     RNN_UNIT = 64
 
-    add_real = './datasets/Origin/c23/'
-    add_fake = './datasets/DF/c23/'
-    add_weights = './weights/tf/'
+    add_real = './datasets/Origin/'
+    add_fake = './datasets/DF/'
+    add_weights = './weights/'
 
     if if_gpu:
         # Optional to uncomment if some bugs occur.
@@ -124,8 +125,7 @@ def main(args):
     # model = g1, model_diff = g2
     """
     model = K.Sequential([
-        # layers.InputLayer(input_shape=(BLOCK_SIZE, 136)), # 68*2
-		layers.InputLayer(input_shape=(BLOCK_SIZE, 1404)), # 468*3
+        layers.InputLayer(input_shape=(BLOCK_SIZE, 1404)), # 468*3
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),
@@ -134,8 +134,7 @@ def main(args):
         layers.Dense(2, activation='softmax')
     ])
     model_diff = K.Sequential([
-        # layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 136)),
-		layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 1404)),
+        layers.InputLayer(input_shape=(BLOCK_SIZE - 1, 1404)),
         layers.Dropout(0.25),
         layers.Bidirectional(layers.GRU(RNN_UNIT)),
         layers.Dropout(DROPOUT_RATE),
@@ -162,9 +161,26 @@ def main(args):
                 verbose=1)
         ]
         model.compile(optimizer=optimizer, loss=lossFunction, metrics=['accuracy'])
-        model.fit(train_samples, train_labels, batch_size=1024,
-                  validation_data=(test_samples, test_labels), epochs=500,
+        history = model.fit(train_samples, train_labels, batch_size=1500,
+                  validation_data=(test_samples, test_labels), epochs=800,
                   shuffle=True, callbacks=callbacks)
+            
+        # print("history:")
+        # print(history.history)
+        acc = history.history['accuracy']
+        val_acc = history.history['val_accuracy']
+        loss = history.history['loss']
+        val_loss = history.history['val_loss']
+        epochs = range(1, len(acc) + 1)
+        
+        plt.figure(1)
+        plt.title('g1: Accuracy and Loss')
+        plt.plot(epochs, acc, 'red', label='acc')
+        plt.plot(epochs, val_acc, 'green', label='val_acc')
+        plt.plot(epochs, loss, 'blue', label='loss')
+        plt.plot(epochs, val_loss, 'yellow', label='val_loss')
+        plt.legend()
+        plt.savefig('model.jpg')
         # ----g1 end----#
 
         # ----For g2----#
@@ -176,9 +192,24 @@ def main(args):
                 verbose=1)
         ]
         model_diff.compile(optimizer=optimizer, loss=lossFunction, metrics=['accuracy'])
-        model_diff.fit(train_samples_diff, train_labels_diff, batch_size=1024,
+        history_diff = model_diff.fit(train_samples_diff, train_labels_diff, batch_size=1500,
                        validation_data=(test_samples_diff, test_labels), epochs=400,
                        shuffle=True, callbacks=callbacks_diff)
+        
+        acc_diff = history_diff.history['accuracy']
+        val_acc_diff = history_diff.history['val_accuracy']
+        loss_diff = history_diff.history['loss']
+        val_loss_diff = history_diff.history['val_loss']
+        epochs_diff = range(1, len(acc_diff) + 1)
+        
+        plt.figure(2)
+        plt.title('g2: Accuracy and Loss')
+        plt.plot(epochs_diff, acc_diff, 'red', label='acc')
+        plt.plot(epochs_diff, val_acc_diff, 'green', label='val_acc')
+        plt.plot(epochs_diff, loss_diff, 'blue', label='loss')
+        plt.plot(epochs_diff, val_loss_diff, 'yellow', label='val_loss')
+        plt.legend()
+        plt.savefig('model_diff.jpg')
         # ----g2 end----#
 
     if if_evaluate:
@@ -255,3 +286,4 @@ if __name__ == "__main__":
                         )
     args = parser.parse_args()
     main(args)
+    
