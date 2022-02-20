@@ -17,7 +17,7 @@ def get_data(path, fake, block):
     x_diff = []
     y = []
 
-    for file in tqdm(files):
+    for file in tqdm(files, ncols=90):
         # print("file:"+file)
         vectors = np.loadtxt(join(path, file))
         # print(type(vectors))
@@ -61,7 +61,8 @@ def get_data_for_test(path, fake, block):
     sample_to_video = []
 
     print("Loading data and embedding...")
-    for file in tqdm(files):
+    for file in tqdm(files, ncols=90):
+        # print("file:"+file)
         vectors = np.loadtxt(join(path, file))
         video_y.append(fake)
 
